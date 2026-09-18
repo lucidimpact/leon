@@ -32,8 +32,11 @@ const YT_DLP_BIN = process.env.MP3_DL_YT_DLP_BIN || 'yt-dlp'
 const FFMPEG_BIN = process.env.MP3_DL_FFMPEG_BIN || 'ffmpeg'
 // Transcription. The binary is auto-detected unless one is named here.
 const WHISPER_BIN = process.env.MP3_DL_WHISPER_BIN || ''
-const WHISPER_MODEL = process.env.MP3_DL_WHISPER_MODEL || 'base'
-const WHISPER_LANGUAGE = process.env.MP3_DL_WHISPER_LANGUAGE || ''
+// English by default: the `.en` models are trained on English alone and read it
+// better, and naming the language skips the detection pass. Both are
+// overridable for other languages, e.g. MODEL=base LANGUAGE=fr.
+const WHISPER_MODEL = process.env.MP3_DL_WHISPER_MODEL || 'base.en'
+const WHISPER_LANGUAGE = process.env.MP3_DL_WHISPER_LANGUAGE || 'en'
 const TRANSCRIBE_TIMEOUT =
   Number(process.env.MP3_DL_TRANSCRIBE_TIMEOUT || 1800) * 1000
 // Escape hatch for installs this app cannot work out on its own, e.g.
