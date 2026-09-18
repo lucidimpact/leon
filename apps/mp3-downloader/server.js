@@ -517,12 +517,8 @@ function runCommand(bin, args, timeoutMs = 180_000) {
   })
 }
 
-/**
- * A pip-installed yt-dlp is a Python script whose shebang names the exact
- * interpreter that owns it — which is the one that can upgrade it. A standalone
- * binary has no such shebang and updates itself with `-U` instead.
- */
-async function readPipInterpreter() {
+/** The real path of the yt-dlp that will run, symlinks followed. */
+async function resolveYtDlpPath() {
   const locator = process.platform === 'win32' ? 'where' : 'which'
   const resolved = await runCommand(locator, [YT_DLP_BIN], 10_000)
 
@@ -531,6 +527,20 @@ async function readPipInterpreter() {
   }
 
   const binPath = resolved.output.split('\n')[0].trim()
+
+  // Homebrew puts a symlink on PATH and the real file under Cellar.
+  return fsp.realpath(binPath).catch(() => binPath)
+}
+
+/**
+ * A pip-installed yt-dlp is a Python script whose shebang names the exact
+ * interpreter that owns it — which is the one that can upgrade it. A standalone
+ * binary has no such shebang and updates itself with `-U` instead.
+ */
+async function readPipInterpreter(binPath) {
+  if (!binPath) {
+    return ''
+  }
 
   try {
     const handle = await fsp.open(binPath, 'r')
@@ -564,7 +574,14 @@ async function resolveUpdateCommand() {
     return { bin: tokens[0], args: tokens.slice(1), kind: 'custom' }
   }
 
-  const interpreter = await readPipInterpreter()
+  const binPath = await resolveYtDlpPath()
+
+  // Homebrew owns its own installs; pip and `-U` both refuse to touch them.
+  if (binPath.includes('/Cellar/') || binPath.includes('/homebrew/')) {
+    return { bin: 'brew', args: ['upgrade', 'yt-dlp'], kind: 'brew' }
+  }
+
+  const interpreter = await readPipInterpreter(binPath)
 
   if (interpreter) {
     return {
@@ -595,9 +612,9 @@ async function runYtDlpUpdate() {
   // the detected route fails, try the other one before giving up.
   if (result.code !== 0 && primary.kind !== 'custom') {
     const fallback =
-      primary.kind === 'pip'
-        ? { bin: YT_DLP_BIN, args: ['-U'] }
-        : { bin: 'python3', args: ['-m', 'pip', 'install', '-U', 'yt-dlp'] }
+      primary.kind === 'self'
+        ? { bin: 'python3', args: ['-m', 'pip', 'install', '-U', 'yt-dlp'] }
+        : { bin: YT_DLP_BIN, args: ['-U'] }
     const fallbackResult = await runCommand(fallback.bin, fallback.args)
 
     result = {

@@ -37,7 +37,9 @@ The app checks for yt-dlp and ffmpeg at startup and says so in the page if eithe
 node apps/mp3-downloader/server.js
 ```
 
-It prints the address and opens <http://127.0.0.1:4545> in your browser.
+On a Mac you can skip the terminal entirely: double-click **start.command** inside this folder.
+
+Either way it prints the address and opens <http://127.0.0.1:4545> in your browser.
 
 1. Paste the video URL.
 2. Pick a bitrate — 192 kbps is the default and is fine for most things.
@@ -90,7 +92,8 @@ broke, the app handles it without a terminal:
 - **Try again** — appears on any failed row and re-runs that same URL, so the fix-then-retry loop
   is two clicks.
 
-Installed through Homebrew or pipx? Point the button at the right command:
+Homebrew installs are handled automatically — the button runs `brew upgrade yt-dlp` when it sees
+yt-dlp came from Homebrew. For anything else it cannot work out, such as pipx, name the command:
 
 ```bash
 MP3_DL_UPDATE_CMD="brew upgrade yt-dlp" node apps/mp3-downloader/server.js
