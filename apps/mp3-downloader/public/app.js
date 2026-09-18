@@ -11,6 +11,10 @@ const emptyState = document.getElementById('empty-state')
 const statusCard = document.getElementById('status-card')
 const statusList = document.getElementById('status-list')
 const outputDir = document.getElementById('output-dir')
+const fixButton = document.getElementById('fix-button')
+const fixVersion = document.getElementById('fix-version')
+const fixMessage = document.getElementById('fix-message')
+const fixOutput = document.getElementById('fix-output')
 
 /** jobId -> rendered <li> */
 const rows = new Map()
@@ -56,6 +60,15 @@ function renderJob(job) {
     row
       .querySelector('[data-cancel]')
       .addEventListener('click', () => cancelJob(job.id))
+    row
+      .querySelector('[data-retry]')
+      .addEventListener('click', () => retryJob(job.id))
+    row.querySelector('[data-fix]').addEventListener('click', () => {
+      document
+        .getElementById('maintenance-card')
+        .scrollIntoView({ behavior: 'smooth' })
+      runFix()
+    })
   }
 
   emptyState.hidden = rows.size > 0
@@ -72,7 +85,10 @@ function renderJob(job) {
 
   row.querySelector('[data-bar]').style.width =
     `${job.status === 'done' ? 100 : job.percent}%`
-  row.querySelector('[data-message]').textContent = job.message
+  const messageCell = row.querySelector('[data-message]')
+
+  messageCell.textContent = job.message
+  messageCell.title = job.message
 
   const stats = [
     job.speed,
@@ -89,6 +105,8 @@ function renderJob(job) {
   downloadLink.setAttribute('download', job.fileName || 'audio.mp3')
 
   row.querySelector('[data-cancel]').hidden = isFinished
+  row.querySelector('[data-retry]').hidden = job.status !== 'error'
+  row.querySelector('[data-fix]').hidden = job.status !== 'error'
 }
 
 /* ========== END RENDERING ========== */
@@ -105,6 +123,19 @@ function followJob(jobId) {
 
 async function cancelJob(jobId) {
   await fetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' }).catch(() => {})
+}
+
+async function retryJob(jobId) {
+  const response = await fetch(`/api/jobs/${jobId}/retry`, { method: 'POST' })
+
+  if (!response.ok) {
+    return
+  }
+
+  const job = await response.json()
+
+  renderJob(job)
+  followJob(job.id)
 }
 
 async function submitForm(event) {
@@ -141,6 +172,75 @@ async function submitForm(event) {
 
 /* ========== END JOB LIFECYCLE ========== */
 
+/* ========== MAINTENANCE ========== */
+
+function renderUpdateState(state) {
+  fixButton.disabled = state.running
+  fixButton.textContent = state.running ? 'Updating…' : 'Fix download process'
+
+  if (state.versionAfter || state.versionBefore) {
+    fixVersion.textContent = `yt-dlp ${state.versionAfter || state.versionBefore}`
+  }
+
+  fixMessage.hidden = !state.message
+  fixMessage.textContent = state.message || ''
+
+  if (state.ok !== null) {
+    fixMessage.dataset.state = state.ok ? 'ok' : 'failed'
+  }
+
+  fixOutput.hidden = !state.output
+  fixOutput.textContent = state.output || ''
+}
+
+/** A second tab can be watching the same update, so poll until it settles. */
+async function pollUpdateState() {
+  const state = await fetch('/api/update-yt-dlp').then((response) =>
+    response.json()
+  )
+
+  renderUpdateState(state)
+
+  if (state.running) {
+    setTimeout(pollUpdateState, 2000)
+  }
+}
+
+async function runFix() {
+  if (fixButton.disabled) {
+    return
+  }
+
+  renderUpdateState({
+    running: true,
+    message: 'Updating yt-dlp…',
+    ok: null,
+    output: ''
+  })
+
+  try {
+    const response = await fetch('/api/update-yt-dlp', { method: 'POST' })
+    const state = await response.json()
+
+    if (response.status === 409) {
+      await pollUpdateState()
+
+      return
+    }
+
+    renderUpdateState(state)
+  } catch (error) {
+    renderUpdateState({
+      running: false,
+      ok: false,
+      message: `Could not run the update: ${error.message}`,
+      output: ''
+    })
+  }
+}
+
+/* ========== END MAINTENANCE ========== */
+
 /* ========== BOOTSTRAP ========== */
 
 async function loadHealth() {
@@ -162,6 +262,10 @@ async function loadHealth() {
   statusList.innerHTML = missing.map((item) => `<li>${item}</li>`).join('')
   statusCard.hidden = missing.length === 0
   outputDir.textContent = `Saving to ${health.outputDir}`
+
+  if (health.ytDlp.available) {
+    fixVersion.textContent = `yt-dlp ${health.ytDlp.version}`
+  }
 }
 
 async function loadExistingJobs() {
@@ -177,7 +281,9 @@ async function loadExistingJobs() {
 }
 
 form.addEventListener('submit', submitForm)
+fixButton.addEventListener('click', runFix)
 loadHealth().catch(() => {})
 loadExistingJobs().catch(() => {})
+pollUpdateState().catch(() => {})
 
 /* ========== END BOOTSTRAP ========== */

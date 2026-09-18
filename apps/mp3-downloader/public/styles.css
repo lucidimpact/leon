@@ -362,6 +362,15 @@ code {
   font-size: 0.85rem;
 }
 
+/* Error text can run long; keep the row readable and put the rest on hover. */
+.job__meta > span:first-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
 .job__stats {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -373,6 +382,58 @@ code {
 }
 
 /* ========== END JOB LIST ========== */
+
+/* ========== MAINTENANCE ========== */
+
+.maintenance__copy {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.maintenance__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.maintenance__version {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.maintenance__message {
+  margin: 14px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.maintenance__message[data-state='ok'] {
+  color: var(--accent);
+}
+
+.maintenance__message[data-state='failed'] {
+  color: var(--text);
+}
+
+.maintenance__output {
+  max-height: 220px;
+  margin: 10px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ========== END MAINTENANCE ========== */
 
 /* ========== FOOTER ========== */
 

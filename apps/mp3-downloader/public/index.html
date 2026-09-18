@@ -95,6 +95,30 @@
         <ul id="job-list" class="job-list"></ul>
       </section>
       <!-- ========== END RESULTS ========== -->
+
+      <!-- ========== MAINTENANCE ========== -->
+      <section class="card" id="maintenance-card">
+        <h2 class="card__title">Troubleshooting</h2>
+        <p class="maintenance__copy">
+          Downloads failing? Video sites change their players often, and
+          <code>yt-dlp</code> is the part that keeps up with them. Updating it
+          fixes most breakage.
+        </p>
+        <div class="maintenance__row">
+          <button id="fix-button" class="button button--primary" type="button">
+            Fix download process
+          </button>
+          <span id="fix-version" class="maintenance__version"></span>
+        </div>
+        <p
+          id="fix-message"
+          class="maintenance__message"
+          role="status"
+          hidden
+        ></p>
+        <pre id="fix-output" class="maintenance__output" hidden></pre>
+      </section>
+      <!-- ========== END MAINTENANCE ========== -->
     </main>
 
     <!-- ========== JOB TEMPLATE ========== -->
@@ -113,6 +137,12 @@
           <a class="button button--ghost" data-download hidden download
             >Save file</a
           >
+          <button class="button button--ghost" type="button" data-retry hidden>
+            Try again
+          </button>
+          <button class="button button--ghost" type="button" data-fix hidden>
+            Fix download process
+          </button>
           <button class="button button--ghost" type="button" data-cancel>
             Cancel
           </button>

@@ -30,6 +30,9 @@ const MAX_CONCURRENT_JOBS = Number(process.env.MP3_DL_MAX_CONCURRENT || 2)
 const OPEN_BROWSER = process.env.MP3_DL_OPEN !== '0'
 const YT_DLP_BIN = process.env.MP3_DL_YT_DLP_BIN || 'yt-dlp'
 const FFMPEG_BIN = process.env.MP3_DL_FFMPEG_BIN || 'ffmpeg'
+// Escape hatch for installs this app cannot work out on its own, e.g.
+// MP3_DL_UPDATE_CMD="brew upgrade yt-dlp" or "pipx upgrade yt-dlp".
+const UPDATE_CMD = process.env.MP3_DL_UPDATE_CMD || ''
 const PUBLIC_DIR = path.join(__dirname, 'public')
 
 /**
@@ -403,6 +406,181 @@ async function readHealth() {
 
 /* ========== END DEPENDENCY CHECK ========== */
 
+/* ========== YT-DLP MAINTENANCE ========== */
+
+/**
+ * yt-dlp is the piece that breaks when a video site changes its player, so the
+ * UI offers a one-click update. Only one update runs at a time and the raw
+ * output is kept so the page can show exactly what happened.
+ */
+const updateState = {
+  running: false,
+  ok: null,
+  command: '',
+  output: '',
+  message: '',
+  versionBefore: '',
+  versionAfter: '',
+  finishedAt: 0
+}
+
+function publicUpdateState() {
+  return { ...updateState }
+}
+
+/** Runs a command to completion and returns its exit code plus merged output. */
+function runCommand(bin, args, timeoutMs = 180_000) {
+  return new Promise((resolve) => {
+    let child
+
+    try {
+      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch (error) {
+      resolve({ code: -1, output: error.message })
+
+      return
+    }
+
+    let output = ''
+    const timer = setTimeout(() => {
+      output += '\n\nTimed out.'
+      child.kill('SIGKILL')
+    }, timeoutMs)
+
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk) => {
+      output += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      output += chunk
+    })
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      resolve({ code: -1, output: `${output}${error.message}`.trim() })
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve({ code: code === null ? -1 : code, output: output.trim() })
+    })
+  })
+}
+
+/**
+ * A pip-installed yt-dlp is a Python script whose shebang names the exact
+ * interpreter that owns it — which is the one that can upgrade it. A standalone
+ * binary has no such shebang and updates itself with `-U` instead.
+ */
+async function readPipInterpreter() {
+  const locator = process.platform === 'win32' ? 'where' : 'which'
+  const resolved = await runCommand(locator, [YT_DLP_BIN], 10_000)
+
+  if (resolved.code !== 0) {
+    return ''
+  }
+
+  const binPath = resolved.output.split('\n')[0].trim()
+
+  try {
+    const handle = await fsp.open(binPath, 'r')
+    const buffer = Buffer.alloc(256)
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+
+    await handle.close()
+
+    const shebang = buffer
+      .subarray(0, bytesRead)
+      .toString('utf8')
+      .split('\n')[0]
+
+    if (shebang.startsWith('#!') && shebang.includes('python')) {
+      const tokens = shebang.slice(2).trim().split(/\s+/)
+
+      // `#!/usr/bin/env python3` points at the interpreter with its second token.
+      return tokens[0].endsWith('env') && tokens[1] ? tokens[1] : tokens[0]
+    }
+  } catch {
+    // Unreadable, or a real binary: fall through to the self-update path.
+  }
+
+  return ''
+}
+
+async function resolveUpdateCommand() {
+  if (UPDATE_CMD) {
+    const tokens = UPDATE_CMD.split(' ').filter(Boolean)
+
+    return { bin: tokens[0], args: tokens.slice(1), kind: 'custom' }
+  }
+
+  const interpreter = await readPipInterpreter()
+
+  if (interpreter) {
+    return {
+      bin: interpreter,
+      args: ['-m', 'pip', 'install', '-U', 'yt-dlp'],
+      kind: 'pip'
+    }
+  }
+
+  return { bin: YT_DLP_BIN, args: ['-U'], kind: 'self' }
+}
+
+async function runYtDlpUpdate() {
+  updateState.running = true
+  updateState.ok = null
+  updateState.message = 'Updating yt-dlp…'
+  updateState.output = ''
+
+  const before = await checkBinary(YT_DLP_BIN, ['--version'])
+  const primary = await resolveUpdateCommand()
+
+  updateState.command = [primary.bin, ...primary.args].join(' ')
+  updateState.versionBefore = before.version
+
+  let result = await runCommand(primary.bin, primary.args)
+
+  // pip installs cannot self-update and standalone binaries have no pip, so if
+  // the detected route fails, try the other one before giving up.
+  if (result.code !== 0 && primary.kind !== 'custom') {
+    const fallback =
+      primary.kind === 'pip'
+        ? { bin: YT_DLP_BIN, args: ['-U'] }
+        : { bin: 'python3', args: ['-m', 'pip', 'install', '-U', 'yt-dlp'] }
+    const fallbackResult = await runCommand(fallback.bin, fallback.args)
+
+    result = {
+      code: fallbackResult.code,
+      output: `$ ${updateState.command}\n${result.output}\n\n$ ${[
+        fallback.bin,
+        ...fallback.args
+      ].join(' ')}\n${fallbackResult.output}`
+    }
+    updateState.command = [fallback.bin, ...fallback.args].join(' ')
+  }
+
+  const after = await checkBinary(YT_DLP_BIN, ['--version'])
+
+  updateState.versionAfter = after.version
+  updateState.output = result.output
+  updateState.ok = result.code === 0
+
+  if (result.code !== 0) {
+    updateState.message = 'Update failed — the output below says why.'
+  } else if (after.version && after.version !== before.version) {
+    updateState.message = `Updated ${before.version} → ${after.version}. Try the download again.`
+  } else {
+    updateState.message = `Already on the latest version (${after.version || 'unknown'}).`
+  }
+
+  updateState.running = false
+  updateState.finishedAt = Date.now()
+
+  return publicUpdateState()
+}
+
+/* ========== END YT-DLP MAINTENANCE ========== */
+
 /* ========== HTTP HELPERS ========== */
 
 function sendJson(res, statusCode, body) {
@@ -572,16 +750,52 @@ function handleCancelJob(res, job) {
   sendJson(res, 200, publicJob(job))
 }
 
+/** Re-runs a finished job's URL as a fresh job, e.g. after an update. */
+function handleRetryJob(res, job) {
+  const retry = createJob(job.url, job.quality)
+
+  retry.title = job.title
+  enqueueJob(retry)
+  sendJson(res, 201, publicJob(retry))
+}
+
+async function handleUpdateYtDlp(res) {
+  if (updateState.running) {
+    sendJson(res, 409, {
+      error: 'An update is already running',
+      ...publicUpdateState()
+    })
+
+    return
+  }
+
+  sendJson(res, 200, await runYtDlpUpdate())
+}
+
 async function router(req, res) {
   const { pathname } = new URL(req.url, `http://${req.headers.host}`)
   const jobRoute = pathname.match(
-    /^\/api\/jobs\/([\w-]+)(\/events|\/file|\/cancel)?$/
+    /^\/api\/jobs\/([\w-]+)(\/events|\/file|\/cancel|\/retry)?$/
   )
 
   if (req.method === 'GET' && pathname === '/api/health') {
     sendJson(res, 200, await readHealth())
 
     return
+  }
+
+  if (pathname === '/api/update-yt-dlp') {
+    if (req.method === 'GET') {
+      sendJson(res, 200, publicUpdateState())
+
+      return
+    }
+
+    if (req.method === 'POST') {
+      await handleUpdateYtDlp(res)
+
+      return
+    }
   }
 
   if (req.method === 'GET' && pathname === '/api/jobs') {
@@ -623,6 +837,12 @@ async function router(req, res) {
 
     if (req.method === 'POST' && jobRoute[2] === '/cancel') {
       handleCancelJob(res, job)
+
+      return
+    }
+
+    if (req.method === 'POST' && jobRoute[2] === '/retry') {
+      handleRetryJob(res, job)
 
       return
     }

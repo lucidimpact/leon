@@ -47,22 +47,39 @@ Progress runs live in the page. Once a row says **Ready**, the MP3 is already sa
 `~/Downloads/mp3-downloader`; **Save file** just hands you another copy through the browser. Stop
 the server with `Ctrl+C`.
 
-Keep yt-dlp current with `pip install -U yt-dlp` — video sites change often, and yt-dlp is the part
-that keeps up with them.
+## When downloads start failing
+
+Video sites change their players, and yt-dlp is the part that keeps up with them. When that is what
+broke, the app handles it without a terminal:
+
+- **Fix download process** — the button in the Troubleshooting card updates yt-dlp in place. It
+  works out how yt-dlp was installed (it reads the shebang of the `yt-dlp` on your `PATH`) and uses
+  the matching route: `python -m pip install -U yt-dlp` for a pip install, `yt-dlp -U` for a
+  standalone binary. If the detected route fails, it tries the other one and shows you the raw
+  output either way.
+- **Try again** — appears on any failed row and re-runs that same URL, so the fix-then-retry loop
+  is two clicks.
+
+Installed through Homebrew or pipx? Point the button at the right command:
+
+```bash
+MP3_DL_UPDATE_CMD="brew upgrade yt-dlp" node apps/mp3-downloader/server.js
+```
 
 ## Configuration
 
 All optional, via environment variables:
 
-| Variable                | Default                      | Purpose                             |
-| ----------------------- | ---------------------------- | ----------------------------------- |
-| `MP3_DL_PORT`           | `4545`                       | HTTP port                           |
-| `MP3_DL_HOST`           | `127.0.0.1`                  | Bind address (localhost by default) |
-| `MP3_DL_OUTPUT_DIR`     | `~/Downloads/mp3-downloader` | Where MP3s are written              |
-| `MP3_DL_MAX_CONCURRENT` | `2`                          | Parallel downloads                  |
-| `MP3_DL_OPEN`           | `1`                          | Set to `0` to not open the browser  |
-| `MP3_DL_YT_DLP_BIN`     | `yt-dlp`                     | Path to the yt-dlp binary           |
-| `MP3_DL_FFMPEG_BIN`     | `ffmpeg`                     | Path to the ffmpeg binary           |
+| Variable                | Default                      | Purpose                                 |
+| ----------------------- | ---------------------------- | --------------------------------------- |
+| `MP3_DL_PORT`           | `4545`                       | HTTP port                               |
+| `MP3_DL_HOST`           | `127.0.0.1`                  | Bind address (localhost by default)     |
+| `MP3_DL_OUTPUT_DIR`     | `~/Downloads/mp3-downloader` | Where MP3s are written                  |
+| `MP3_DL_MAX_CONCURRENT` | `2`                          | Parallel downloads                      |
+| `MP3_DL_OPEN`           | `1`                          | Set to `0` to not open the browser      |
+| `MP3_DL_YT_DLP_BIN`     | `yt-dlp`                     | Path to the yt-dlp binary               |
+| `MP3_DL_FFMPEG_BIN`     | `ffmpeg`                     | Path to the ffmpeg binary               |
+| `MP3_DL_UPDATE_CMD`     | auto-detected                | Command behind **Fix download process** |
 
 Example:
 
@@ -83,6 +100,9 @@ The UI is built on a small JSON API, usable on its own:
 | `GET`  | `/api/jobs/:id/events` | Server-sent events progress stream            |
 | `GET`  | `/api/jobs/:id/file`   | The finished MP3                              |
 | `POST` | `/api/jobs/:id/cancel` | Stop a queued or running job                  |
+| `POST` | `/api/jobs/:id/retry`  | Re-run the same URL as a new job              |
+| `GET`  | `/api/update-yt-dlp`   | State of the last yt-dlp update               |
+| `POST` | `/api/update-yt-dlp`   | Update yt-dlp, returning the command output   |
 
 ```bash
 curl -X POST http://127.0.0.1:4545/api/jobs \
