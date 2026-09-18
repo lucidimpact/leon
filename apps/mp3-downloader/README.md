@@ -4,28 +4,51 @@ A small local web app that pulls the audio out of an online video and saves it a
 
 It is a dependency-free Node server (no `npm install` needed) wrapping
 [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) and [`ffmpeg`](https://ffmpeg.org/), with a browser UI
-for pasting links and watching progress.
+for pasting links and watching progress. This folder is self-contained — copy it anywhere on your
+machine and it runs on its own.
 
-## Requirements
+## Install
 
-| Tool     | Install                                                                    |
-| -------- | -------------------------------------------------------------------------- |
-| Node 18+ | already required by this repository                                        |
-| yt-dlp   | `pip install -U yt-dlp` (or `brew install yt-dlp`)                         |
-| ffmpeg   | `brew install ffmpeg` · `sudo apt install ffmpeg` · `choco install ffmpeg` |
+Three one-time steps.
 
-The app checks for both at startup and tells you in the UI if one is missing.
+**1. Node 18 or newer.** Check with `node -v`. If it is missing, get it from
+<https://nodejs.org>, or `brew install node` / `sudo apt install nodejs`.
 
-## Run it
+**2. yt-dlp** — this is what talks to the video sites.
+
+```bash
+pip install -U yt-dlp        # any OS with Python
+brew install yt-dlp          # macOS
+```
+
+**3. ffmpeg** — this is what converts the audio to MP3.
+
+```bash
+brew install ffmpeg          # macOS
+sudo apt install ffmpeg      # Debian / Ubuntu
+choco install ffmpeg         # Windows
+```
+
+The app checks for yt-dlp and ffmpeg at startup and says so in the page if either is missing.
+
+## Use
 
 ```bash
 node apps/mp3-downloader/server.js
 ```
 
-Then open <http://127.0.0.1:4545>.
+It prints the address and opens <http://127.0.0.1:4545> in your browser.
 
-Paste a video URL, pick a bitrate, hit **Download MP3**. Progress streams live; when a job is done
-the file is already on disk and **Save file** hands you a copy through the browser.
+1. Paste the video URL.
+2. Pick a bitrate — 192 kbps is the default and is fine for most things.
+3. Press **Download MP3**.
+
+Progress runs live in the page. Once a row says **Ready**, the MP3 is already saved to
+`~/Downloads/mp3-downloader`; **Save file** just hands you another copy through the browser. Stop
+the server with `Ctrl+C`.
+
+Keep yt-dlp current with `pip install -U yt-dlp` — video sites change often, and yt-dlp is the part
+that keeps up with them.
 
 ## Configuration
 
@@ -37,6 +60,7 @@ All optional, via environment variables:
 | `MP3_DL_HOST`           | `127.0.0.1`                  | Bind address (localhost by default) |
 | `MP3_DL_OUTPUT_DIR`     | `~/Downloads/mp3-downloader` | Where MP3s are written              |
 | `MP3_DL_MAX_CONCURRENT` | `2`                          | Parallel downloads                  |
+| `MP3_DL_OPEN`           | `1`                          | Set to `0` to not open the browser  |
 | `MP3_DL_YT_DLP_BIN`     | `yt-dlp`                     | Path to the yt-dlp binary           |
 | `MP3_DL_FFMPEG_BIN`     | `ffmpeg`                     | Path to the ffmpeg binary           |
 

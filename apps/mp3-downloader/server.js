@@ -27,6 +27,7 @@ const DOWNLOAD_DIR =
   process.env.MP3_DL_OUTPUT_DIR ||
   path.join(os.homedir(), 'Downloads', 'mp3-downloader')
 const MAX_CONCURRENT_JOBS = Number(process.env.MP3_DL_MAX_CONCURRENT || 2)
+const OPEN_BROWSER = process.env.MP3_DL_OPEN !== '0'
 const YT_DLP_BIN = process.env.MP3_DL_YT_DLP_BIN || 'yt-dlp'
 const FFMPEG_BIN = process.env.MP3_DL_FFMPEG_BIN || 'ffmpeg'
 const PUBLIC_DIR = path.join(__dirname, 'public')
@@ -644,6 +645,33 @@ async function router(req, res) {
 
 /* ========== END ROUTES ========== */
 
+/* ========== BROWSER LAUNCH ========== */
+
+/** Opens the UI in the default browser; a failure here is never fatal. */
+function openInBrowser(url) {
+  const opener =
+    process.platform === 'darwin'
+      ? 'open'
+      : process.platform === 'win32'
+        ? 'start'
+        : 'xdg-open'
+
+  try {
+    const child = spawn(opener, [url], {
+      stdio: 'ignore',
+      detached: true,
+      shell: process.platform === 'win32'
+    })
+
+    child.on('error', () => {})
+    child.unref()
+  } catch {
+    // The user can always open the printed URL themselves.
+  }
+}
+
+/* ========== END BROWSER LAUNCH ========== */
+
 /* ========== BOOTSTRAP ========== */
 
 const server = http.createServer((req, res) => {
@@ -671,6 +699,10 @@ async function start() {
       console.log(
         '  ⚠ ffmpeg was not found — MP3 conversion needs it (brew/apt install ffmpeg)'
       )
+    }
+
+    if (OPEN_BROWSER) {
+      openInBrowser(`http://${HOST}:${PORT}`)
     }
   })
 }

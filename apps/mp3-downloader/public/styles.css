@@ -1,29 +1,36 @@
 /* ========== TOKENS ========== */
 
 :root {
-  --bg: #0e1116;
-  --surface: #171b22;
-  --surface-alt: #1f242d;
-  --border: #2b323d;
-  --text: #e7ecf3;
-  --text-muted: #9aa5b4;
-  --accent: #5b8cff;
-  --accent-strong: #3f74f5;
-  --success: #3ecf8e;
-  --danger: #f4736c;
+  --red: #e60023;
+  --red-bright: #ff0f30;
+  --red-deep: #9e0018;
+  --black: #0a0a0a;
+  --white: #ffffff;
+
+  --bg: var(--black);
+  --surface: #141414;
+  --surface-alt: #1e1e1e;
+  --border: #2e2e2e;
+  --text: var(--white);
+  --text-muted: #a3a3a3;
+  --accent: var(--red);
+  --accent-strong: var(--red-bright);
+  --on-accent: var(--white);
   --radius: 12px;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f4f6fa;
-    --surface: #ffffff;
-    --surface-alt: #eef1f7;
-    --border: #d9dfe9;
-    --text: #141a22;
-    --text-muted: #5d6877;
-    --shadow: 0 10px 30px rgba(20, 26, 34, 0.08);
+    --bg: #f5f5f5;
+    --surface: var(--white);
+    --surface-alt: #ededed;
+    --border: #dcdcdc;
+    --text: var(--black);
+    --text-muted: #5f5f5f;
+    --accent: var(--red);
+    --accent-strong: var(--red-deep);
+    --shadow: 0 12px 34px rgba(10, 10, 10, 0.1);
   }
 }
 
@@ -56,6 +63,7 @@ code {
   padding: 1px 5px;
   border-radius: 5px;
   background: var(--surface-alt);
+  color: var(--accent);
   font-size: 0.85em;
 }
 
@@ -66,18 +74,44 @@ code {
 .header {
   max-width: 720px;
   margin: 0 auto;
-  padding: 40px 0 24px;
+  padding: 44px 0 26px;
   text-align: center;
 }
 
 .header__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
-  letter-spacing: -0.02em;
+  font-size: clamp(1.7rem, 4vw, 2.3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+/* The word "MP3" carries the red; everything else stays black and white. */
+.header__accent {
+  color: var(--accent);
+}
+
+.header__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--white);
+  box-shadow: 0 4px 14px rgba(230, 0, 35, 0.4);
+}
+
+.header__mark svg {
+  width: 22px;
+  height: 22px;
 }
 
 .header__subtitle {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--text-muted);
 }
 
@@ -101,14 +135,16 @@ code {
 }
 
 .card--status {
-  border-color: var(--danger);
+  border-color: var(--accent);
+  border-left-width: 4px;
 }
 
 .card__title {
   margin: 0 0 12px;
-  font-size: 1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
 }
 
@@ -138,19 +174,26 @@ code {
 }
 
 .form__label {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--text-muted);
 }
 
 .form__input,
 .form__select {
   width: 100%;
-  padding: 11px 12px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-alt);
   color: var(--text);
   font-size: 1rem;
+}
+
+.form__input:focus,
+.form__select:focus {
+  border-color: var(--accent);
 }
 
 .form__input:focus-visible,
@@ -162,8 +205,9 @@ code {
 
 .form__error {
   margin: 0;
-  color: var(--danger);
+  color: var(--accent);
   font-size: 0.9rem;
+  font-weight: 600;
 }
 
 /* ========== END FORM ========== */
@@ -171,18 +215,18 @@ code {
 /* ========== BUTTONS ========== */
 
 .button {
-  padding: 11px 18px;
+  padding: 12px 20px;
   border: 1px solid transparent;
   border-radius: 10px;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
   cursor: pointer;
 }
 
 .button--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .button--primary:hover:not(:disabled) {
@@ -196,11 +240,12 @@ code {
 }
 
 .button--ghost:hover:not(:disabled) {
-  background: var(--surface-alt);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -213,6 +258,10 @@ code {
   padding-left: 18px;
   color: var(--text-muted);
   font-size: 0.92rem;
+}
+
+.status-list li::marker {
+  color: var(--accent);
 }
 
 .status-list li + li {
@@ -255,30 +304,40 @@ code {
 
 .job__title {
   overflow: hidden;
-  font-weight: 600;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .job__badge {
   flex-shrink: 0;
-  padding: 2px 9px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: var(--border);
-  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
+}
+
+.job__badge[data-state='downloading'],
+.job__badge[data-state='converting'] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .job__badge[data-state='done'] {
-  background: var(--success);
-  color: #06281a;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .job__badge[data-state='error'],
 .job__badge[data-state='cancelled'] {
-  background: var(--danger);
-  color: #2a0b0a;
+  border-color: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .job__bar {
