@@ -83,6 +83,19 @@
             </button>
           </div>
 
+          <label class="checkbox" for="transcribe">
+            <input
+              id="transcribe"
+              name="transcribe"
+              class="checkbox__input"
+              type="checkbox"
+            />
+            <span class="checkbox__text">
+              Also save a transcript
+              <span class="checkbox__hint" id="transcribe-hint"></span>
+            </span>
+          </label>
+
           <p id="form-error" class="form__error" role="alert" hidden></p>
         </form>
       </section>
@@ -135,8 +148,19 @@
         </div>
         <div class="job__actions">
           <a class="button button--ghost" data-download hidden download
-            >Save file</a
+            >Save MP3</a
           >
+          <a class="button button--ghost" data-transcript hidden download
+            >Save transcript</a
+          >
+          <button
+            class="button button--ghost"
+            type="button"
+            data-transcribe
+            hidden
+          >
+            Transcribe
+          </button>
           <button class="button button--ghost" type="button" data-retry hidden>
             Try again
           </button>

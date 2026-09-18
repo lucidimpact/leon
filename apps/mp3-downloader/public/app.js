@@ -11,6 +11,8 @@ const emptyState = document.getElementById('empty-state')
 const statusCard = document.getElementById('status-card')
 const statusList = document.getElementById('status-list')
 const outputDir = document.getElementById('output-dir')
+const transcribeCheckbox = document.getElementById('transcribe')
+const transcribeHint = document.getElementById('transcribe-hint')
 const fixButton = document.getElementById('fix-button')
 const fixVersion = document.getElementById('fix-version')
 const fixMessage = document.getElementById('fix-message')
@@ -18,6 +20,9 @@ const fixOutput = document.getElementById('fix-output')
 
 /** jobId -> rendered <li> */
 const rows = new Map()
+
+/** Set from /api/health; gates the transcript controls. */
+let transcriberAvailable = false
 
 /* ========== END ELEMENTS ========== */
 
@@ -63,6 +68,11 @@ function renderJob(job) {
     row
       .querySelector('[data-retry]')
       .addEventListener('click', () => retryJob(job.id))
+    row
+      .querySelector('[data-transcribe]')
+      .addEventListener('click', (event) =>
+        transcribeJob(job.id, event.currentTarget)
+      )
     row.querySelector('[data-fix]').addEventListener('click', () => {
       document
         .getElementById('maintenance-card')
@@ -104,6 +114,22 @@ function renderJob(job) {
   downloadLink.href = `/api/jobs/${job.id}/file`
   downloadLink.setAttribute('download', job.fileName || 'audio.mp3')
 
+  const transcriptLink = row.querySelector('[data-transcript]')
+
+  transcriptLink.hidden = !job.transcriptFileName
+  transcriptLink.href = `/api/jobs/${job.id}/transcript`
+  transcriptLink.setAttribute(
+    'download',
+    job.transcriptFileName || 'transcript.txt'
+  )
+
+  const transcribeButton = row.querySelector('[data-transcribe]')
+
+  transcribeButton.hidden =
+    job.status !== 'done' ||
+    Boolean(job.transcriptFileName) ||
+    !transcriberAvailable
+
   row.querySelector('[data-cancel]').hidden = isFinished
   row.querySelector('[data-retry]').hidden = job.status !== 'error'
   row.querySelector('[data-fix]').hidden = job.status !== 'error'
@@ -138,6 +164,22 @@ async function retryJob(jobId) {
   followJob(job.id)
 }
 
+async function transcribeJob(jobId, button) {
+  button.disabled = true
+  button.textContent = 'Transcribing…'
+
+  try {
+    const response = await fetch(`/api/jobs/${jobId}/transcribe`, {
+      method: 'POST'
+    })
+
+    renderJob(await response.json())
+  } finally {
+    button.disabled = false
+    button.textContent = 'Transcribe'
+  }
+}
+
 async function submitForm(event) {
   event.preventDefault()
   showError('')
@@ -149,7 +191,8 @@ async function submitForm(event) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         url: urlInput.value.trim(),
-        quality: qualitySelect.value
+        quality: qualitySelect.value,
+        transcribe: transcribeCheckbox.checked
       })
     })
     const body = await response.json()
@@ -266,6 +309,12 @@ async function loadHealth() {
   if (health.ytDlp.available) {
     fixVersion.textContent = `yt-dlp ${health.ytDlp.version}`
   }
+
+  transcriberAvailable = health.whisper.available
+  transcribeCheckbox.disabled = !transcriberAvailable
+  transcribeHint.textContent = transcriberAvailable
+    ? `Saved as a .txt beside the MP3, using ${health.whisper.bin} (${health.whisper.model} model).`
+    : 'Needs a transcriber — install one with: pip install -U openai-whisper'
 }
 
 async function loadExistingJobs() {

@@ -30,6 +30,12 @@ const MAX_CONCURRENT_JOBS = Number(process.env.MP3_DL_MAX_CONCURRENT || 2)
 const OPEN_BROWSER = process.env.MP3_DL_OPEN !== '0'
 const YT_DLP_BIN = process.env.MP3_DL_YT_DLP_BIN || 'yt-dlp'
 const FFMPEG_BIN = process.env.MP3_DL_FFMPEG_BIN || 'ffmpeg'
+// Transcription. The binary is auto-detected unless one is named here.
+const WHISPER_BIN = process.env.MP3_DL_WHISPER_BIN || ''
+const WHISPER_MODEL = process.env.MP3_DL_WHISPER_MODEL || 'base'
+const WHISPER_LANGUAGE = process.env.MP3_DL_WHISPER_LANGUAGE || ''
+const TRANSCRIBE_TIMEOUT =
+  Number(process.env.MP3_DL_TRANSCRIBE_TIMEOUT || 1800) * 1000
 // Escape hatch for installs this app cannot work out on its own, e.g.
 // MP3_DL_UPDATE_CMD="brew upgrade yt-dlp" or "pipx upgrade yt-dlp".
 const UPDATE_CMD = process.env.MP3_DL_UPDATE_CMD || ''
@@ -63,11 +69,12 @@ const jobs = new Map()
 const queue = []
 let runningCount = 0
 
-function createJob(url, quality) {
+function createJob(url, quality, transcribe = false) {
   const job = {
     id: crypto.randomUUID(),
     url,
     quality,
+    transcribe,
     status: 'queued', // queued | downloading | converting | done | error | cancelled
     title: '',
     percent: 0,
@@ -77,6 +84,9 @@ function createJob(url, quality) {
     fileName: '',
     filePath: '',
     fileSize: 0,
+    transcriptFileName: '',
+    transcriptPath: '',
+    transcribing: false,
     createdAt: Date.now(),
     finishedAt: 0,
     settled: false,
@@ -98,6 +108,7 @@ function publicJob(job) {
     id: job.id,
     url: job.url,
     quality: job.quality,
+    transcribe: job.transcribe,
     status: job.status,
     title: job.title,
     percent: job.percent,
@@ -106,6 +117,7 @@ function publicJob(job) {
     message: job.message,
     fileName: job.fileName,
     fileSize: job.fileSize,
+    transcriptFileName: job.transcriptFileName,
     createdAt: job.createdAt,
     finishedAt: job.finishedAt
   }
@@ -329,12 +341,37 @@ async function runJob(job) {
     try {
       const result = await collectResult(job)
 
-      finishJob(job, {
-        status: 'done',
+      updateJob(job, {
         percent: 100,
-        message: 'Ready',
         title: job.title || path.basename(result.fileName, '.mp3'),
         ...result
+      })
+
+      if (!job.transcribe) {
+        finishJob(job, { status: 'done', message: 'Ready' })
+
+        return
+      }
+
+      updateJob(job, { status: 'transcribing', message: 'Transcribing audio…' })
+
+      const transcript = await transcribeFile(job)
+
+      if (!transcript.ok) {
+        // The MP3 is already on disk, so a failed transcript is not a failed job.
+        finishJob(job, {
+          status: 'done',
+          message: `Audio ready. Transcription failed: ${transcript.error}`
+        })
+
+        return
+      }
+
+      finishJob(job, {
+        status: 'done',
+        message: 'Audio and transcript ready',
+        transcriptFileName: transcript.fileName,
+        transcriptPath: transcript.filePath
       })
     } catch (error) {
       finishJob(job, { status: 'error', message: error.message })
@@ -396,12 +433,23 @@ function checkBinary(bin, args) {
 }
 
 async function readHealth() {
-  const [ytDlp, ffmpeg] = await Promise.all([
+  const [ytDlp, ffmpeg, whisperBin] = await Promise.all([
     checkBinary(YT_DLP_BIN, ['--version']),
-    checkBinary(FFMPEG_BIN, ['-version'])
+    checkBinary(FFMPEG_BIN, ['-version']),
+    detectWhisper()
   ])
 
-  return { ytDlp, ffmpeg, outputDir: DOWNLOAD_DIR }
+  return {
+    ytDlp,
+    ffmpeg,
+    whisper: {
+      available: Boolean(whisperBin),
+      // A configured binary can be a long absolute path; the page wants a name.
+      bin: path.basename(whisperBin),
+      model: WHISPER_MODEL
+    },
+    outputDir: DOWNLOAD_DIR
+  }
 }
 
 /* ========== END DEPENDENCY CHECK ========== */
@@ -581,6 +629,94 @@ async function runYtDlpUpdate() {
 
 /* ========== END YT-DLP MAINTENANCE ========== */
 
+/* ========== TRANSCRIPTION ========== */
+
+/**
+ * Transcription runs through a Whisper command-line tool. Two are supported
+ * because they take the same flags: `whisper` (openai-whisper) and
+ * `whisper-ctranslate2` (faster-whisper), whichever is on PATH.
+ */
+const WHISPER_CANDIDATES = ['whisper', 'whisper-ctranslate2']
+
+let whisperBinCache = ''
+
+async function detectWhisper() {
+  if (WHISPER_BIN) {
+    return WHISPER_BIN
+  }
+
+  if (whisperBinCache) {
+    return whisperBinCache
+  }
+
+  const locator = process.platform === 'win32' ? 'where' : 'which'
+
+  for (const candidate of WHISPER_CANDIDATES) {
+    const found = await runCommand(locator, [candidate], 10_000)
+
+    if (found.code === 0) {
+      whisperBinCache = candidate
+
+      return candidate
+    }
+  }
+
+  // Left uncached, so installing a transcriber mid-session is picked up.
+  return ''
+}
+
+function buildWhisperArgs(filePath, outputDir) {
+  const args = [
+    filePath,
+    '--model',
+    WHISPER_MODEL,
+    '--output_format',
+    'txt',
+    '--output_dir',
+    outputDir
+  ]
+
+  if (WHISPER_LANGUAGE) {
+    args.push('--language', WHISPER_LANGUAGE)
+  }
+
+  return args
+}
+
+/** Writes `<name>.txt` beside the job's `<name>.mp3`. */
+async function transcribeFile(job) {
+  const bin = await detectWhisper()
+
+  if (!bin) {
+    return {
+      ok: false,
+      error:
+        'no transcriber found — install one with: pip install -U openai-whisper'
+    }
+  }
+
+  const outputDir = path.dirname(job.filePath)
+  const result = await runCommand(
+    bin,
+    buildWhisperArgs(job.filePath, outputDir),
+    TRANSCRIBE_TIMEOUT
+  )
+  const expected = `${path.basename(job.filePath, path.extname(job.filePath))}.txt`
+  const transcriptPath = path.join(outputDir, expected)
+
+  if (!fs.existsSync(transcriptPath)) {
+    const reason =
+      result.output.trim().split('\n').pop() ||
+      `${bin} exited with code ${result.code}`
+
+    return { ok: false, error: reason }
+  }
+
+  return { ok: true, fileName: expected, filePath: transcriptPath }
+}
+
+/* ========== END TRANSCRIPTION ========== */
+
 /* ========== HTTP HELPERS ========== */
 
 function sendJson(res, statusCode, body) {
@@ -669,7 +805,7 @@ async function handleCreateJob(req, res) {
     return
   }
 
-  const job = createJob(url, quality)
+  const job = createJob(url, quality, body.transcribe === true)
 
   enqueueJob(job)
   sendJson(res, 201, publicJob(job))
@@ -715,6 +851,70 @@ function handleJobFile(req, res, job) {
   fs.createReadStream(job.filePath).pipe(res)
 }
 
+function handleTranscriptFile(res, job) {
+  if (!job.transcriptPath || !fs.existsSync(job.transcriptPath)) {
+    sendJson(res, 404, { error: 'No transcript for this download' })
+
+    return
+  }
+
+  const asciiName = job.transcriptFileName
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/"/g, "'")
+
+  res.writeHead(200, {
+    'content-type': 'text/plain; charset=utf-8',
+    'content-disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(
+      job.transcriptFileName
+    )}`
+  })
+  fs.createReadStream(job.transcriptPath).pipe(res)
+}
+
+/** Transcribes a download that finished earlier, on request from its row. */
+async function handleTranscribeJob(res, job) {
+  if (job.status !== 'done' || !job.filePath || !fs.existsSync(job.filePath)) {
+    sendJson(res, 409, {
+      error: 'That download has no audio file to transcribe'
+    })
+
+    return
+  }
+
+  if (job.transcribing) {
+    sendJson(res, 409, {
+      error: 'A transcription is already running for this download'
+    })
+
+    return
+  }
+
+  job.transcribing = true
+  updateJob(job, { status: 'transcribing', message: 'Transcribing audio…' })
+
+  const transcript = await transcribeFile(job)
+
+  job.transcribing = false
+
+  if (!transcript.ok) {
+    updateJob(job, {
+      status: 'done',
+      message: `Transcription failed: ${transcript.error}`
+    })
+    sendJson(res, 500, { error: transcript.error, ...publicJob(job) })
+
+    return
+  }
+
+  updateJob(job, {
+    status: 'done',
+    message: 'Audio and transcript ready',
+    transcriptFileName: transcript.fileName,
+    transcriptPath: transcript.filePath
+  })
+  sendJson(res, 200, publicJob(job))
+}
+
 function handleCancelJob(res, job) {
   if (['done', 'error', 'cancelled'].includes(job.status)) {
     sendJson(res, 409, { error: `Job is already ${job.status}` })
@@ -752,7 +952,7 @@ function handleCancelJob(res, job) {
 
 /** Re-runs a finished job's URL as a fresh job, e.g. after an update. */
 function handleRetryJob(res, job) {
-  const retry = createJob(job.url, job.quality)
+  const retry = createJob(job.url, job.quality, job.transcribe)
 
   retry.title = job.title
   enqueueJob(retry)
@@ -775,7 +975,7 @@ async function handleUpdateYtDlp(res) {
 async function router(req, res) {
   const { pathname } = new URL(req.url, `http://${req.headers.host}`)
   const jobRoute = pathname.match(
-    /^\/api\/jobs\/([\w-]+)(\/events|\/file|\/cancel|\/retry)?$/
+    /^\/api\/jobs\/([\w-]+)(\/events|\/file|\/transcript|\/cancel|\/retry|\/transcribe)?$/
   )
 
   if (req.method === 'GET' && pathname === '/api/health') {
@@ -841,8 +1041,20 @@ async function router(req, res) {
       return
     }
 
+    if (req.method === 'GET' && jobRoute[2] === '/transcript') {
+      handleTranscriptFile(res, job)
+
+      return
+    }
+
     if (req.method === 'POST' && jobRoute[2] === '/retry') {
       handleRetryJob(res, job)
+
+      return
+    }
+
+    if (req.method === 'POST' && jobRoute[2] === '/transcribe') {
+      await handleTranscribeJob(res, job)
 
       return
     }
