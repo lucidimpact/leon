@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <!-- ========== HEAD ========== -->
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MP3 Downloader</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>"
+    />
+  </head>
+  <!-- ========== END HEAD ========== -->
+
+  <body>
+    <!-- ========== HEADER ========== -->
+    <header class="header">
+      <h1 class="header__title">
+        <span aria-hidden="true">🎵</span> MP3 Downloader
+      </h1>
+      <p class="header__subtitle">Paste a video link, get an MP3.</p>
+    </header>
+    <!-- ========== END HEADER ========== -->
+
+    <main class="layout">
+      <!-- ========== DEPENDENCY STATUS ========== -->
+      <section id="status-card" class="card card--status" hidden>
+        <h2 class="card__title">Setup needed</h2>
+        <ul id="status-list" class="status-list"></ul>
+      </section>
+      <!-- ========== END DEPENDENCY STATUS ========== -->
+
+      <!-- ========== DOWNLOAD FORM ========== -->
+      <section class="card">
+        <form id="download-form" class="form" autocomplete="off">
+          <div class="form__row">
+            <label class="form__label" for="url">Video URL</label>
+            <input
+              id="url"
+              name="url"
+              class="form__input"
+              type="url"
+              inputmode="url"
+              placeholder="https://…"
+              required
+            />
+          </div>
+
+          <div class="form__row form__row--inline">
+            <div class="form__field">
+              <label class="form__label" for="quality">Audio quality</label>
+              <select id="quality" name="quality" class="form__select">
+                <option value="320K">320 kbps</option>
+                <option value="256K">256 kbps</option>
+                <option value="192K" selected>192 kbps</option>
+                <option value="128K">128 kbps</option>
+                <option value="96K">96 kbps</option>
+                <option value="0">Best available (VBR)</option>
+              </select>
+            </div>
+
+            <button
+              id="submit-button"
+              class="button button--primary"
+              type="submit"
+            >
+              Download MP3
+            </button>
+          </div>
+
+          <p id="form-error" class="form__error" role="alert" hidden></p>
+        </form>
+      </section>
+      <!-- ========== END DOWNLOAD FORM ========== -->
+
+      <!-- ========== RESULTS ========== -->
+      <section class="card card--results">
+        <h2 class="card__title">Downloads</h2>
+        <p id="empty-state" class="empty-state">Nothing queued yet.</p>
+        <ul id="job-list" class="job-list"></ul>
+      </section>
+      <!-- ========== END RESULTS ========== -->
+    </main>
+
+    <!-- ========== JOB TEMPLATE ========== -->
+    <template id="job-template">
+      <li class="job" data-job>
+        <div class="job__head">
+          <span class="job__title" data-title>Fetching…</span>
+          <span class="job__badge" data-status>queued</span>
+        </div>
+        <div class="job__bar"><div class="job__bar-fill" data-bar></div></div>
+        <div class="job__meta">
+          <span data-message></span>
+          <span class="job__stats" data-stats></span>
+        </div>
+        <div class="job__actions">
+          <a class="button button--ghost" data-download hidden download
+            >Save file</a
+          >
+          <button class="button button--ghost" type="button" data-cancel>
+            Cancel
+          </button>
+        </div>
+      </li>
+    </template>
+    <!-- ========== END JOB TEMPLATE ========== -->
+
+    <!-- ========== FOOTER ========== -->
+    <footer class="footer">
+      <p>
+        Runs locally on top of <code>yt-dlp</code> and <code>ffmpeg</code>.
+        Download only what you have the rights to.
+      </p>
+      <p id="output-dir" class="footer__path"></p>
+    </footer>
+    <!-- ========== END FOOTER ========== -->
+
+    <!-- ========== SCRIPTS ========== -->
+    <script src="/app.js"></script>
+    <!-- ========== END SCRIPTS ========== -->
+  </body>
+</html>

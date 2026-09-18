@@ -1,0 +1,14 @@
+{
+  "name": "mp3-downloader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small local web app that extracts MP3 audio from online videos",
+  "license": "MIT",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
