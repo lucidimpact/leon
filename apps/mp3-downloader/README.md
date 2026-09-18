@@ -63,9 +63,17 @@ pip install -U whisper-ctranslate2     # faster-whisper; quicker on a CPU
 Until one is installed, the checkbox stays disabled and says so. The first run downloads the model
 (a few hundred MB) and is slower than the ones after it.
 
-`MP3_DL_WHISPER_MODEL` picks the model — `tiny`, `base` (the default), `small`, `medium`, `large`.
-Bigger is more accurate and slower. `MP3_DL_WHISPER_LANGUAGE` skips language detection when you
-already know it, e.g. `en`.
+It transcribes English by default, using the `base.en` model. Those `.en` models are trained on
+English alone and read it better than the general ones, and naming the language up front skips the
+detection pass.
+
+For another language, name a general model and that language:
+
+```bash
+MP3_DL_WHISPER_MODEL=base MP3_DL_WHISPER_LANGUAGE=fr node apps/mp3-downloader/server.js
+```
+
+Model sizes run `tiny`, `base`, `small`, `medium`, `large` — bigger is more accurate and slower.
 
 A failed transcript never costs you the audio: the MP3 stays, and the row says what went wrong.
 
@@ -103,8 +111,8 @@ All optional, via environment variables:
 | `MP3_DL_FFMPEG_BIN`         | `ffmpeg`                     | Path to the ffmpeg binary               |
 | `MP3_DL_UPDATE_CMD`         | auto-detected                | Command behind **Fix download process** |
 | `MP3_DL_WHISPER_BIN`        | auto-detected                | Path to the Whisper binary              |
-| `MP3_DL_WHISPER_MODEL`      | `base`                       | Whisper model size                      |
-| `MP3_DL_WHISPER_LANGUAGE`   | auto-detected                | Force a language, e.g. `en`             |
+| `MP3_DL_WHISPER_MODEL`      | `base.en`                    | Whisper model size                      |
+| `MP3_DL_WHISPER_LANGUAGE`   | `en`                         | Spoken language, e.g. `fr`              |
 | `MP3_DL_TRANSCRIBE_TIMEOUT` | `1800`                       | Transcription timeout, in seconds       |
 
 Example:
